@@ -1,0 +1,40 @@
+The hayes program for linux is a small hayes modem emulator. hayes
+is very small because it only handles the terminal side, AT commands
+and the in-band <1s>+++<1s>
+
+The delay time of 1 second can only be changed in the hayes source.
+
+Hayes commands are:
+
+ATDTcommand    connect
+ATH            hangup
+ATO            online
+ATE            echo
+ATV            verbose
+AVQ            quiet
+
+ATX            exit
+AT?            help
+
+command is the command which connects. Examples:
+
+ATDTtelnet 3corners.us
+ATDTssh fred@home
+
+nc is another candidate. bash can be used to provide a local shell.
+
+
+./hayes
+
+OK
+AT
+OK
+ATDTtelnet 3corners.us
+
+<1s>+++<1s>
+OK
+ATH
+ATX
+
+ATDTssh fred@home
+
