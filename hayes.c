@@ -25,7 +25,7 @@
 #define NOTHING
 #define FOREVER for (;;)
 
-#define VERSION "0.11"
+#define VERSION "0.12"
 
 
 /* std is terminal side, dev is connection side.
@@ -348,7 +348,8 @@ void command(void) {
 /* Signon giving option feedback
  */
 void signon(void) {
-    printf("hayes " VERSION "\n\n");
+    printf("hayes " VERSION " %s\n\n",
+	terminal ? terminal : "stdin");
 }
 
 
@@ -366,6 +367,10 @@ int main(int argc, char **argv) {
 	    exit(1);
 	}
 	std_in = std_out;
+	fclose(stdin);
+	fclose(stdout);
+	stdin = fdopen(std_in, "r");
+	stdout = fdopen(std_out, "w");
     }
 
     tcgetattr(std_in, &oldt);
