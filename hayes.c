@@ -345,32 +345,24 @@ void command(void) {
 }
 
 
-/* Signon giving option feedback
- */
-void signon(void) {
-    printf("hayes " VERSION " %s\n\n",
-	terminal ? terminal : "stdin");
-}
-
-
 /* Hayes main
  */
 int main(int argc, char **argv) {
+    int fd;
 
     options(argc, argv);
 
-    signon();
     if (terminal) {
-        std_out = open(terminal, O_RDWR);
-	if (std_out < 0) {
+        fd = open(terminal, O_RDWR);
+	if (fd < 0) {
 	    fprintf(stderr, "can\'t open terminal %s\n", terminal);
 	    exit(1);
 	}
-	std_in = std_out;
-	fclose(stdin);
-	fclose(stdout);
-	stdin = fdopen(std_in, "r");
-	stdout = fdopen(std_out, "w");
+	dup2(fd, 0);
+	dup2(fd, 1);
+	dup2(fd, 2);
+	system(argv[0]);
+	exit(0);
     }
 
     tcgetattr(std_in, &oldt);
