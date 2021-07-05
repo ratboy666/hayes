@@ -1,8 +1,16 @@
 The hayes program for linux is a small hayes modem emulator. hayes
 is very small because it only handles the terminal side, AT commands
-and the in-band <1s>+++<1s>
+and the in-band <0.5s>+++<0.5s>
 
-The delay time of 1 second can only be changed in the hayes source.
+The delay time of 0.5 seconds can only be changed in hayes.c
+
+Make sure that the tty used for the terminal side has reasonable
+editing settings:
+
+	stty -F /dev/ttyUSB0 sane
+	hayes -t /dev/ttyUSB0
+
+should do.
 
 Hayes commands are:
 
@@ -12,6 +20,8 @@ ATO            online
 ATE            echo
 ATV            verbose
 AVQ            quiet
+ATI            information
+ATZ            reset
 
 ATX            exit
 AT?            help
