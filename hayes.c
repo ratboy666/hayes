@@ -23,8 +23,9 @@
 
 
 #define NOTHING
+#define FOREVER for (;;)
 
-#define VERSION "0.10"
+#define VERSION "0.11"
 
 
 /* std is terminal side, dev is connection side.
@@ -41,8 +42,8 @@ struct termios newt;
 jmp_buf jenv;
 
 int quiet = 0;
-int verbose = 0;
-int echo = 0; 
+int verbose = 1;
+int echo = 1; 
 int *reg = NULL;
 pid_t pid = -1;
 
@@ -75,19 +76,45 @@ void options(int argc, char **argv) {
 }
 
 
+#define OK          0
+#define CONNECT     1
+#define NO_CARRIER  3
+#define ERROR       4
+#define NO_DIALTONE 6
+#define BUSY        7
+
+
+void response(int r) {
+    char *resp[] = { "OK", "CONNECT", "", "NO CARRIER",
+	             "ERROR", "", "NO DIALTONE", "BUSY"
+                   };
+
+    if (quiet)
+	return;
+    if ((r < 0) || (r > 7))
+	response(ERROR);
+    else {
+        if (verbose)
+    	    printf("%s\r\n", resp[r]);
+	else
+	    printf("%d\r\n", r);
+    }
+}
+
+
 void copy(void) {
     struct timeval tv;
     struct timeval last = { 0, 0 };
     fd_set fds;
     int pcnt, n, gap;
-    char c;
+    char c, c2;
 
     if (dev < 0)
 	return;
     gap = 0;
     pcnt = 0;
     gettimeofday(&last, NULL);
-    for (;;) {
+    FOREVER {
 
         /* copy mode. Look at both std_in and dev and
 	 * copy to the other (std_in to dev and dev to
@@ -107,34 +134,47 @@ void copy(void) {
         /* Get gap time. We get here on each character, or
 	 * every 10 milliseconds.
 	 */
-        gettimeofday(&tv, NULL);
-	if ((tv.tv_sec - last.tv_sec) >= 1) {
-	    /* If we have have seen +++, enter command mode
-             */
-	    gap = 1;
-	    if (pcnt == 3) {
-		longjmp(jenv, 1);
-	    }
-	last = tv;
-        }
+
+	if (gap == 0) {
+            gettimeofday(&tv, NULL);
+	    if (
+	        ((tv.tv_sec - last.tv_sec) >= 1)
+
+	     || ((tv.tv_sec == last.tv_sec) &&
+	         (tv.tv_usec - last.tv_usec) >= 500000)
+
+     	       ) {
+	        /* If we have have seen +++, enter command mode.
+	         * If not, just record we have had a sufficient
+	         * gap (for subsequent +++)
+                 */
+	        gap = 1;
+	        if (pcnt == 3)
+		    longjmp(jenv, 1);
+            }
+	}
 
 	if (FD_ISSET(std_in, &fds)) {
 	    last = tv;
 	    n = read(std_in, &c, 1);
 	    if (n == 1) {
+		/* If we read a '+', and we have a sufficient gap,
+		 * begin '+' counter. If we are counting '+',
+		 * and it is a new '+', increase '+' counter.
+		 * If it is not a '+', zero the '+' count
+		 */
 		if ((c == '+') && (pcnt == 0) && gap) {
 	            ++pcnt;
 		} else if ((c == '+') && pcnt) {
-		    gap = 0;
 	            ++pcnt;
 		} else if (c != '+') {
-		    gap = 0;
 		    while (pcnt) {
-			c = '+';
-			write(dev, &c, 1);
+			c2 = '+';
+			write(dev, &c2, 1);
+			--pcnt;
 		    }
-		    pcnt = 0;
 		}
+		gap = 0;
 		if (pcnt == 0) 
                     write(dev, &c, 1);
 	    }
@@ -152,6 +192,7 @@ void copy(void) {
 	        else {
 		    close(dev);
 		    dev = -1;
+	            response(NO_CARRIER);
 		    longjmp(jenv, 1);
 		}	
 	    }
@@ -162,41 +203,17 @@ void copy(void) {
 }
 
 
-#define OK          0
-#define CONNECT     1
-#define NO_CARRIER  3
-#define ERROR       4
-#define NO_DIALTONE 6
-#define BUSY        7
-
-
-void response(int r) {
-    char *resp[] = { "OK", "CONNECT", "", "NO CARRIER",
-	             "ERROR", "", "NO DIALTONE", "BUSY"
-                   };
-
-    if (quiet > 0)
-	return;
-    if ((r < 0) || (r > 7))
-	response(ERROR);
-    else {
-        if (verbose == 0)
-    	    printf("%s\r\n", resp[r]);
-	else
-	    printf("%d\r\n", r);
-    }
-}
-
-
 void help(void) {
     printf("AT\r\n");
     printf("\r\n");
     printf("  ? help\r\n");
     printf("  X exit\r\n");
     printf("\r\n");
-    printf("  O to call\r\n");
+    printf("  O return to call\r\n");
     printf("  H hook\r\n");
     printf("  D dial\r\n");
+    printf("  Z reset\r\n");
+    printf("  I information\r\n");
     printf("\r\n");
     printf("  E echo\r\n");
     printf("  V verbose\r\n");
@@ -240,9 +257,10 @@ void command(void) {
 
     setjmp(jenv);
     r = OK;
-    for (;;) {
+    reg = NULL;
+    FOREVER {
         response(r);
-	if (echo == 0) {
+	if (echo) {
             tcsetattr(std_in, TCSAFLUSH, &oldt);
 	    fgets(buf, sizeof buf, stdin);
 	    if (buf[strlen(buf) - 1] == '\n')
@@ -284,12 +302,20 @@ void command(void) {
 	    case 'd': case 'D':
 		dial(s + 1);
 		longjmp(jenv, 1);
+	    case 'z': case 'Z':
+		echo = 1;
+		verbose = 1;
+		quiet = 0;
 	    case 'h': case 'H':
 		hangup();
 		longjmp(jenv, 1);
 	    case 'o': case 'O':
                 copy();
 		longjmp(jenv, 1);
+	    case 'i': case 'I':
+                printf("hayes " VERSION "\r\n");
+		reg = NULL;
+		break;
             case '0': case '1': case '2': case '3': case '4':
 	    case '5': case '6': case '7': case '8': case '9':
 		if (reg)
