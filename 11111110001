@@ -1,0 +1,13 @@
+#!/bin/bash
+
+# 11111110001
+#
+# connect to carthoris. Number is programmed as
+# 1-111-111-0001 in MDM740.COM - that calls this script,
+# which delays 2 seconds (note that the hayes program
+# delays 1 second prior to sending CONNECT). This allows
+# time for the ssh login prompt to not get eaten by
+# MDM740.COM
+
+sleep 2
+ssh fred@carthoris

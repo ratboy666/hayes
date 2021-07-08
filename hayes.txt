@@ -22,6 +22,7 @@ ATV            verbose
 AVQ            quiet
 ATI            information
 ATZ            reset
+ATM            set volume
 
 ATX            exit
 AT?            help
@@ -34,6 +35,8 @@ ATDTssh fred@home
 nc is another candidate. bash can be used to provide a local shell.
 
 
+Example:
+
 ./hayes
 
 OK
@@ -41,10 +44,42 @@ AT
 OK
 ATDTtelnet 3corners.us
 
-<1s>+++<1s>
+<delay>+++<delay>
 OK
 ATH
 ATX
 
-ATDTssh fred@home
+ATDT ssh fred@home
+ATDT telnet cbbs.mitsaltair.com 8800
+
+Using hayes with MDM740.COM
+
+m7sio.asm is an overlay for MDM740.COM -- this overlay supports
+the Altair SIO at 0/1, and the Hayes smartmodem. Note that the
+dialing directory is supported.
+
+Each number to be dialed (for example 1-111-111-0001) is converted.
+MDM740 strips out the '-' characters, giving 11111110001, and the
+command to the modem is then
+
+ATDT 11111110001
+
+hayes then delays 1 second. This allows MDM740.COM to clear out its
+input buffer. hayes then sends CONNECT to MDM740.COM, which then
+switches to terminal mode.
+
+Before the 1 second delay, hayes executes 11111110001 as a script.
+This script should be on the path.
+
+    #!/bin/bash
+    # 11111110001
+    sleep 2
+    ssh fred@carthoris
+
+Note the sleep 2, which waits until after CONNECT has been sent.
+This ensures that the password/user prompts from ssh are not eaten
+by MDM740.COM
+
+MDM740.COM command DSC (disconnect) works to hang up the connection
+
 

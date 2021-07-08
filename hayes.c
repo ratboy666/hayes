@@ -25,7 +25,7 @@
 #define NOTHING
 #define FOREVER for (;;)
 
-#define VERSION "0.12"
+#define VERSION "0.13"
 
 
 /* std is terminal side, dev is connection side.
@@ -214,6 +214,7 @@ void help(void) {
     printf("  D dial\r\n");
     printf("  Z reset\r\n");
     printf("  I information\r\n");
+    printf("  M mute\n");
     printf("\r\n");
     printf("  E echo\r\n");
     printf("  V verbose\r\n");
@@ -236,6 +237,8 @@ void dial(char *s) {
         ++s;
     else if (toupper(*s) == 'P')
         ++s;
+    while (*s == ' ')
+	++s;
     pid = forkpty(&dev, NULL, NULL, NULL);
     if (pid < 0)
 	dev = -1;
@@ -244,8 +247,16 @@ void dial(char *s) {
 	pid = -1;
 	exit(0);
     }
-    if (dev >= 0)
-	response(CONNECT);
+    if (dev >= 0) {
+	/* MDM740 needs 100ms delay (minimum) to go to analyzing
+	 * reponse.
+	 */
+	sleep(1);
+	if (pid >= 0)
+	    response(CONNECT);
+	else
+	    response(BUSY);
+    }
     copy();
 }
 
@@ -306,6 +317,9 @@ void command(void) {
 		echo = 1;
 		verbose = 1;
 		quiet = 0;
+	    case 'm': case 'M':
+		reg = NULL;
+		break;
 	    case 'h': case 'H':
 		hangup();
 		longjmp(jenv, 1);
@@ -360,7 +374,8 @@ int main(int argc, char **argv) {
 	}
 	dup2(fd, 0);
 	dup2(fd, 1);
-	dup2(fd, 2);
+/*	dup2(fd, 2); */
+
 	system(argv[0]);
 	exit(0);
     }
