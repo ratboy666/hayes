@@ -4,6 +4,66 @@ and the in-band <0.5s>+++<0.5s>
 
 The delay time of 0.5 seconds can only be changed in hayes.c
 
+This implements the Hayes patent #4,549,302 (now expired), Modem With
+Improved Escape Sequence With Guard Time Mechanism.
+
+The idea behind hayes (as opposed to other modem emulators) is that
+the hayes program does the minimum needed. It is NOT responsible for
+the actual connections. hayes only executes helper programs that
+actually connect. It supports "hangup" (killing the connection helper)
+and the hayes modem in-band sequence. The in-band sequence is the
+way that the hayes modem could be brought into command mode.
+
+The in-band sequence is a delay, followed by three '+' signs, followed
+by another delay. The hayes program only supports a minimal number of
+commands: D (dial) H (hook), O (resume on-line), I (information),
+Z (reset), and a number of "register setting" commands. The register
+setting commands are: M (volume, ignored), E (echo), V (verbose), 
+and Q (quiet).
+
+E (echo) controls echo and line-editing when entering modem commands.
+It restores the tty settings on entry, accepts a line and then restores
+"raw" mode (if E1). E0 (no echo) just accepts characters in command
+mode with no echo or edit. V1 (verbose) gives long-form (word) responses:
+OK, CONNECT, NO CARRIER, ERROR and BUSY. V0 gives numeric result codes
+0 (OK), (1) CONNECT, 3 (NO CARRIER), 4 (ERROR) and 7 (BUSY). Q1 (quiet)
+suppresses all result codes (verbose or numeric).
+
+There are two specific hayes commands X and ?. AT? is used to get help
+on commands. ATX is used to cause the hayes program to exit.
+
+
+Response Codes
+
+  0 OK is produced when ready for a new command.
+  1 CONNECT is produced when ATD is successful. The program
+    has run for at least 1 second.
+  3 NO CARRIER is produced when the program exits.
+  7 BUSY produced if program cannot be run, or exits within
+    one second.
+  4 ERROR is produced if a bad command is given.
+
+Note that baud rate distinctions are not made -- there is no CONNECT 1200,
+for example. All communication through hayes is a byte at a time, but
+at the maximum speed. If hayes is "too slow" for some application, just
+read in (say) 16 bytes and write out that many. That will increase
+the data speed (by quite a bit). I haven't (yet) had the need and so this
+(although very simple to implement) has not been done.
+
+
+Defaults
+
+The command ATZ will return hayes to its defaults. This is: E1 V1 Q0
+Note that ATM is simply ignored. ATI will indicate the version of hayes
+being used:
+
+  ATI
+  hayes 0.13
+  OK
+
+
+Running
+
 Make sure that the tty used for the terminal side has reasonable
 editing settings:
 
@@ -12,51 +72,56 @@ editing settings:
 
 should do.
 
+
+Hayes commands
+
 Hayes commands are:
 
-ATDTcommand    connect
-ATH            hangup
-ATO            online
-ATE            echo
-ATV            verbose
-AVQ            quiet
-ATI            information
-ATZ            reset
-ATM            set volume
+  ATDTcommand    connect
+  ATH            hangup
+  ATO            online
+  ATE            echo
+  ATV            verbose
+  AVQ            quiet
+  ATI            information
+  ATZ            reset
+  ATM            set volume
 
-ATX            exit
-AT?            help
+  ATX            exit (hayes specific)
+  AT?            help (hayes specific)
 
 command is the command which connects. Examples:
 
-ATDTtelnet 3corners.us
-ATDTssh fred@home
+  ATDTtelnet 3corners.us
+  ATDTssh fred@home
 
-nc is another candidate. bash can be used to provide a local shell.
+  nc is another candidate. bash can be used to provide a local shell.
 
 
 Example:
 
-./hayes
+  ./hayes
+  OK
+  AT
+  OK
+  ATDTtelnet 3corners.us
+  <delay>+++<delay>
+  OK
+  ATH
+  ATX
 
-OK
-AT
-OK
-ATDTtelnet 3corners.us
+  ATDT ssh fred@home
+  ATDT telnet cbbs.mitsaltair.com 8800
 
-<delay>+++<delay>
-OK
-ATH
-ATX
-
-ATDT ssh fred@home
-ATDT telnet cbbs.mitsaltair.com 8800
 
 Using hayes with MDM740.COM
 
 m7sio.asm is an overlay for MDM740.COM -- this overlay supports
 the Altair SIO at 0/1, and the Hayes smartmodem. Note that the
 dialing directory is supported.
+
+Since hayes just executes the ATDT argument, the argument can be
+a script --- named as a phone number!
 
 Each number to be dialed (for example 1-111-111-0001) is converted.
 MDM740 strips out the '-' characters, giving 11111110001, and the
@@ -83,3 +148,51 @@ by MDM740.COM
 MDM740.COM command DSC (disconnect) works to hang up the connection
 
 
+Attaching hayes to la36 (or another terminal emulator)
+
+socat is very useful in creating PTYs and copying data back and
+forth. Here we use socat to create a PTY "modem" and attach it
+to the hayes program. Other programs can then use "modem" as if
+it were a tty device. This includes my la36 hardcopy terminal
+emulator. If run at 10cps, this would be a very old-school
+connection.
+
+We can create a virtual modem, and use la36 to attach to it:
+
+  $ export TERM=dumb
+  $ socat PTY,link=modem,wait-slave EXEC:/home/fred/bin/hayes,pty,ctty &
+
+Create modem (slave to hayes).
+
+  $ la36 -d modem -q -c 120
+
+la36 is now attached to modem. We can now use ATDT to start bash:
+
+  OK
+  ATDT bash
+  CONNECT
+  ...normal startup
+  $ bash prompt
+
+The in-band attention sequence will return us to modem command mode,
+and we can "hang up" (stop the bash process) with ATH:
+
+  <delay>+++<delay>
+  OK
+  ATH
+  OK
+
+See "shell" in the la36 package to see how to use socat to create
+a login shell device.
+
+Get la36 from
+
+  https://github.com/ratboy666/la36
+
+
+Bugs
+
+hayes is not a modem. It could be tied to (for example) minimodem, to
+produce a real modem. Not being a modem, a great number of modem
+commands "do not make sense"; hayes is minimal in its command decoding.
+The time delays should be settable.
